@@ -2156,7 +2156,72 @@
 
         createBlackHole(); createCoreStars(); createSphericalHalo(); createBackgroundStars(); createLoveElements();
         window.addEventListener('resize', onWindowResize);
-        renderer.domElement.addEventListener('click', onCanvasClick);
+        
+        // Soporte táctil + mouse para mostrar love card
+        let pointerDownPos = null;
+        const TAP_THRESHOLD = 12; // píxeles máximos de movimiento para considerar "tap"
+        
+        function getPointerPos(e) {
+            if (e.changedTouches && e.changedTouches.length > 0) {
+                return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+            }
+            return { x: e.clientX, y: e.clientY };
+        }
+        
+        function onPointerDown(e) {
+            pointerDownPos = getPointerPos(e);
+        }
+        
+        function onPointerUp(e) {
+            if (!pointerDownPos) return;
+            const pos = getPointerPos(e);
+            const dx = pos.x - pointerDownPos.x;
+            const dy = pos.y - pointerDownPos.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            pointerDownPos = null;
+            
+            // Solo si fue un tap corto (no un arrastre)
+            if (dist < TAP_THRESHOLD) {
+                handleTap(pos.x, pos.y);
+            }
+        }
+        
+        function handleTap(clientX, clientY) {
+            mouse.x = (clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            
+            // Hacer el raycast más tolerante en móvil
+            const intersects = raycaster.intersectObjects(loveImages, false);
+            if (intersects.length > 0) {
+                showLoveCard();
+                return;
+            }
+            
+            // Fallback: si no hay hit exacto, buscar el más cercano en un radio
+            if (loveImages.length > 0) {
+                let closest = null;
+                let minDist = 0.35; // umbral en coordenadas normalizadas
+                loveImages.forEach(img => {
+                    const screenPos = img.position.clone().project(camera);
+                    const d = Math.sqrt(
+                        Math.pow(screenPos.x - mouse.x, 2) + 
+                        Math.pow(screenPos.y - mouse.y, 2)
+                    );
+                    if (d < minDist) {
+                        minDist = d;
+                        closest = img;
+                    }
+                });
+                if (closest) showLoveCard();
+            }
+        }
+        
+        renderer.domElement.addEventListener('pointerdown', onPointerDown, {passive: true});
+        renderer.domElement.addEventListener('pointerup', onPointerUp, {passive: true});
+        // También click por compatibilidad
+        renderer.domElement.addEventListener('click', (e) => handleTap(e.clientX, e.clientY));
+        
         onWindowResize(); animate();
     }
 
@@ -2285,8 +2350,7 @@
     }
 
     function onCanvasClick(event) {
-        mouse.x = (event.clientX / window.innerWidth) * 2 - 1; mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
-        raycaster.setFromCamera(mouse, camera); if (raycaster.intersectObjects(loveImages).length > 0) showLoveCard();
+        // Compatibilidad: el manejo real está en los pointer events dentro de init()
     }
 
     function showLoveCard() {
@@ -2311,6 +2375,7 @@
         init();
     });
     document.getElementById('love-card-overlay').addEventListener('click', () => { document.getElementById('love-card-overlay').style.display = 'none'; });
+    document.getElementById('love-card-overlay').addEventListener('touchend', (e) => { e.preventDefault(); document.getElementById('love-card-overlay').style.display = 'none'; }, {passive: false});
     </script>
 
 </body></html>
